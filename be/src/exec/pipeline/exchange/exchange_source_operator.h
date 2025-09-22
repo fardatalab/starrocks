@@ -16,6 +16,7 @@
 
 #include <atomic>
 
+#include "exec/pipeline/exchange/ISocket.h"
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks {

@@ -37,6 +37,10 @@
 #include "configbase.h"
 
 namespace starrocks::config {
+// External shuffle service configuration.
+CONF_Bool(use_ess, "false");
+CONF_String(ess_tcp_addr, "");
+CONF_Int16(ess_tcp_port, "8080");
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.

@@ -54,7 +54,9 @@ struct TransmitChunkInfo {
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;
-    const TNetworkAddress brpc_addr;
+    bool use_ess;
+    TNetworkAddress brpc_addr;
+    std::pair<const char*, uint16_t> ess_addr;
 };
 
 // TimeTrace is introduced to estimate time more accurately.

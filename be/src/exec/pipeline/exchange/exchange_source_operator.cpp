@@ -44,11 +44,19 @@ Status ExchangeSourceOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
+Status ExchangeSourceOperator::pull_ess(std::unique_ptr<Chunk>* chunk_ptr) {
+    return Status::OK();
+}
+
 StatusOr<ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_unique<Chunk>();
-    RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
-    RETURN_IF_ERROR(eval_no_eq_join_runtime_in_filters(chunk.get()));
-    eval_runtime_bloom_filters(chunk.get());
+    if (_use_external_shuffle_service) {
+        RETURN_IF_ERROR(pull_ess(&chunk));
+    } else {
+        RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
+        RETURN_IF_ERROR(eval_no_eq_join_runtime_in_filters(chunk.get()));
+        eval_runtime_bloom_filters(chunk.get());
+    }
     return std::move(chunk);
 }
 

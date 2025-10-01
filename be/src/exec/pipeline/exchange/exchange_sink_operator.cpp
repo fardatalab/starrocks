@@ -49,18 +49,19 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through, bool enable_exchange_perf,
-            PassThroughChunkBuffer* pass_through_chunk_buffer)
+            const int channel_id, PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through,
+            bool enable_exchange_perf, PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
+              _channel_id(channel_id),
+              _ess_ptr(std::make_unique<fdl::TCPSource>()),
               _use_external_shuffle_service(config::use_ess),
               _ess_endpoint{.protocol = fdl::TCP,
                             .target = {
                                 .addr = std::make_pair<const char*, uint16_t>(
                                     config::ess_tcp_addr.c_str(), static_cast<uint16_t>(config::ess_tcp_port))}},
-              _ess_source_ptr(std::make_unique<fdl::TCPSource>()),
               _enable_exchange_pass_through(enable_exchange_pass_through),
               _enable_exchange_perf(enable_exchange_perf),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
@@ -69,6 +70,8 @@ public:
     // Initialize channel.
     // Returns OK if successful, error indication otherwise.
     Status init(RuntimeState* state);
+
+    Status send_chunks_ess();
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     Status send_one_chunk(RuntimeState* state, const Chunk* chunk, int32_t driver_sequence, bool eos);
@@ -120,12 +123,13 @@ private:
     const TNetworkAddress _brpc_dest_addr;
     const TUniqueId _fragment_instance_id;
     const PlanNodeId _dest_node_id;
+    int _channel_id;
 
+    std::unique_ptr<fdl::ISource> _ess_ptr;
     // Use external shuffle service (DESS).
     const bool _use_external_shuffle_service;
 
     const fdl::endpoint_t _ess_endpoint;
-    std::unique_ptr<fdl::ISource> _ess_source_ptr;
 
     const bool _enable_exchange_pass_through;
     // enable it to profile exchange's performance, which ignores computing local data for exchange_speed/_bytes,
@@ -239,6 +243,15 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     return send_one_chunk(state, chunk, driver_sequence, eos, &is_real_sent);
 }
 
+Status ExchangeSinkOperator::Channel::send_chunks_ess() {
+    _ess_ptr->connect(std::move(_ess_endpoint), _fragment_instance_id.lo, _parent->_destinations.size());
+    for (auto& chunk_pb : _chunk_request->chunks()) {
+        _ess_ptr->send(_channel_id, chunk_pb.data().c_str(), chunk_pb.data_size());
+    }
+    _ess_ptr->close();
+    return Status::OK();
+}
+
 Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const Chunk* chunk, int32_t driver_sequence,
                                                      bool eos, bool* is_real_sent) {
     *is_real_sent = false;
@@ -286,9 +299,12 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
-                                  attachment_physical_bytes, _use_external_shuffle_service, _brpc_dest_addr,
-                                  _ess_endpoint.target.addr};
-        RETURN_IF_ERROR(_parent->_buffer->add_request(info));
+                                  attachment_physical_bytes, _brpc_dest_addr,};
+        if (_use_external_shuffle_service && !_use_pass_through) { // ignore local shuffles
+            RETURN_IF_ERROR(send_chunks_ess());
+        } else {
+            RETURN_IF_ERROR(_parent->_buffer->add_request(info));
+        }
         _current_request_bytes = 0;
         _chunk_request.reset();
         *is_real_sent = true;
@@ -310,9 +326,12 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_use_pass_through(_use_pass_through);
     // This TransmitChunk is not transmitted on the network, so we can have a larger struct with not much cost.
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,std::move(chunk_request), attachment,
-                              attachment_physical_bytes, _use_external_shuffle_service, _brpc_dest_addr,
-                      _ess_endpoint.target.addr};
-    RETURN_IF_ERROR(_parent->_buffer->add_request(info));
+                              attachment_physical_bytes, _brpc_dest_addr};
+    if (_use_external_shuffle_service && !_use_pass_through) { // ignore local shuffles
+        RETURN_IF_ERROR(send_chunks_ess());
+    } else {
+        RETURN_IF_ERROR(_parent->_buffer->add_request(info));
+    }
 
     return Status::OK();
 }
@@ -381,7 +400,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
             _channels.emplace_back(it->second.get());
         } else {
             std::unique_ptr<Channel> channel = std::make_unique<Channel>(
-                    this, destination.brpc_server, fragment_instance_id, dest_node_id, _num_shuffles_per_channel,
+                    this, destination.brpc_server, fragment_instance_id, i, dest_node_id, _num_shuffles_per_channel,
                     enable_exchange_pass_through, enable_exchange_perf, pass_through_chunk_buffer);
             _channels.emplace_back(channel.get());
             _instance_id2channel.emplace(fragment_instance_id.lo, std::move(channel));

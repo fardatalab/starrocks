@@ -36,40 +36,46 @@ void TCPSink::connect(const endpoint_t&& endpoint, const job_id_t job, const par
     send_all(sockfd_, &metadata, sizeof(metadata));
 }
 
-std::unordered_map<partition_id_t, std::pair<std::vector<char>, size_t>> TCPSink::receive(const std::vector<partition_id_t>&& partitions) {
+void TCPSink::receive(std::vector<partition_id_t>&& partitions, std::unordered_map<partition_id_t, std::pair<std::vector<char>, size_t>>* buffers) {
     const header::SinkRequest request {
         .num_partitions = static_cast<uint32_t>(partitions.size())
     };
     send_all(sockfd_, &request, sizeof(request));
     send_all(sockfd_, partitions.data(), partitions.size() * sizeof(partition_id_t));
 
-    std::unordered_map<partition_id_t, std::pair<std::vector<char>, size_t>> buffers;
-    buffers.reserve(partitions.size());
-    for (const auto& partition : partitions) {
+    if (buffers) {
+        partitions_ = std::move(partitions);
+        consume(buffers);
+    }
+}
+
+void TCPSink::consume(std::unordered_map<partition_id_t, std::pair<std::vector<char>, size_t>>* buffers) {
+    assert(partitions_.has_value());
+
+    buffers->reserve(partitions_->size());
+    for (const auto& partition : *partitions_) {
         std::vector<char> buffer;
         buffer.reserve(1 * KiB);
-        buffers.insert({partition, {std::move(buffer), 0}});
+        buffers->insert({partition, {std::move(buffer), 0}});
     }
 
     header::SinkResponse response {
-        .done = false,
+        .is_done = false,
         .partition = 0,
         .size = 0
     };
     while (true) {
         recv_all(sockfd_, &response, sizeof(response));
-        if (response.done) { break; }
-        assert(buffers.contains(response.partition));
+        if (response.is_done) { break; }
+        assert(buffers->contains(response.partition));
 
-        auto& [buffer, offset] = buffers[response.partition];
+        auto& [buffer, offset] = (*buffers)[response.partition];
         if (offset + response.size > buffer.size()) {
             buffer.resize(std::max(buffer.size() << 1, offset + response.size));
         }
         recv_all(sockfd_, buffer.data() + offset, response.size);
         offset += response.size;
     }
-
-    return buffers;
 }
 
 }

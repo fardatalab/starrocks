@@ -14,12 +14,14 @@
 
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 
+#include "exec/dictionary_cache_writer.h"
 #include "glog/logging.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/sender_queue.h"
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
@@ -45,6 +47,22 @@ Status ExchangeSourceOperator::set_finishing(RuntimeState* state) {
 }
 
 Status ExchangeSourceOperator::pull_ess(std::unique_ptr<Chunk>* chunk_ptr) {
+    // TODO(zhujose1): Determine max_partition_id.
+    _ess_ptr->connect(std::move(_ess_endpoint), _stream_recvr->fragment_instance_id().lo, -1);
+    // Push based consume from ESS. Assume only 1 chunk is produced.
+    fdl::partition_map_t buffers;
+    _ess_ptr->consume(&buffers);
+    const auto it = buffers.begin();
+    if (it == buffers.end()) {
+        return Status::InternalError("No data found in ESS ISink::consume");
+    }
+    std::vector<char> vec = it->second.first;
+    ChunkPB chunk_pb;
+    chunk_pb.ParseFromArray(vec.data(), vec.size());
+    faststring uncompressed_buffer;
+    RETURN_IF_ERROR(_stream_recvr->_sender_queues[0]->_deserialize_chunk(
+        chunk_pb, chunk_ptr->get(), _stream_recvr->get_metrics_round_robin(),
+        &uncompressed_buffer));
     return Status::OK();
 }
 

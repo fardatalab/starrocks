@@ -8,34 +8,40 @@
 #include "utils/headers.h"
 
 namespace fdl {
+    enum Protocol {
+        TCP = 0,
+        IB = 1,
+    };
 
-enum Protocol {
-    TCP = 0,
-    IB = 1,
-};
+    struct endpoint_t {
+        Protocol protocol;
 
-struct endpoint_t {
-    Protocol protocol;
-    union {
-        std::pair<const char*, uint16_t> addr;
-    } target;
-};
+        union {
+            std::pair<const char *, uint16_t> addr;
+        } target;
+    };
 
-class ISource {
-public:
-    virtual ~ISource() {};
+    class ISource {
+    public:
+        virtual ~ISource() {
+        };
 
-    virtual void connect(const endpoint_t&& endpoint, job_id_t job, partition_id_t max_partition_id) = 0;
-    virtual void send(partition_id_t partition, const char* src, size_t size) = 0;
-    virtual void close() = 0;
-};
+        virtual void connect(const endpoint_t &&endpoint, job_id_t job, partition_id_t max_partition_id) = 0;
 
-class ISink {
-public:
-    virtual ~ISink() {};
+        virtual void send(partition_id_t partition, const char *src, size_t size) = 0;
 
-    virtual void connect(const endpoint_t&& endpoint, job_id_t job, partition_id_t max_partition_id) = 0;
-    virtual std::unordered_map<partition_id_t, std::pair<std::vector<char>, size_t>> receive(const std::vector<partition_id_t>&& partitions) = 0;
-};
+        virtual void close() = 0;
+    };
 
+    class ISink {
+    public:
+        virtual ~ISink() {
+        };
+
+        virtual void connect(const endpoint_t &&endpoint, job_id_t job, partition_id_t max_partition_id) = 0;
+
+        virtual void receive(std::vector<partition_id_t> &&partitions, partition_map_t *buffers) = 0;
+
+        virtual void consume(partition_map_t *buffers) = 0;
+    };
 }

@@ -33,7 +33,7 @@ namespace fdl {
 
     void TCPSource::send(const partition_id_t partition, const char* src, const size_t size) {
         const header::Source header {
-            .done = false,
+            .is_done = false,
             .partition = partition,
             .size = static_cast<uint32_t>(size)
         };
@@ -43,7 +43,7 @@ namespace fdl {
 
     void TCPSource::close() {
         header::Source header{};
-        header.done = true;
+        header.is_done = true;
         send_all(sockfd_, &header, sizeof(header));
     }
 

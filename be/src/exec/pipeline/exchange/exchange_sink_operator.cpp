@@ -244,10 +244,16 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 }
 
 Status ExchangeSinkOperator::Channel::send_chunks_ess() {
+    LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     _ess_ptr->connect(std::move(_ess_endpoint), _fragment_instance_id.lo, _parent->_destinations.size());
     for (auto& chunk_pb : _chunk_request->chunks()) {
+        LOG(INFO) << "[ESS EXCHANGE SINK] Sending CHANNEL_ID=" << _channel_id << " of size " << chunk_pb.data_size() << " to "
+                  << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
         _ess_ptr->send(_channel_id, chunk_pb.data().c_str(), chunk_pb.data_size());
+        LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending CHANNEL_ID=" << _channel_id << " of size " << chunk_pb.data_size() << " to "
+          << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     }
+    LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     _ess_ptr->close();
     return Status::OK();
 }

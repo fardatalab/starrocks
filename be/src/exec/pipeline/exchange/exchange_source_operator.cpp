@@ -15,7 +15,6 @@
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 
 #include "exec/dictionary_cache_writer.h"
-#include "glog/logging.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
@@ -48,12 +47,15 @@ Status ExchangeSourceOperator::set_finishing(RuntimeState* state) {
 
 Status ExchangeSourceOperator::pull_ess(std::unique_ptr<Chunk>* chunk_ptr) {
     // TODO(zhujose1): Determine max_partition_id.
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Connecting to " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     _ess_ptr->connect(std::move(_ess_endpoint), _stream_recvr->fragment_instance_id().lo, -1);
     // Push based consume from ESS. Assume only 1 chunk is produced.
     fdl::partition_map_t buffers;
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Pulling from " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     _ess_ptr->consume(&buffers);
     const auto it = buffers.begin();
     if (it == buffers.end()) {
+        LOG(WARNING) << "[ESS EXCHANGE SOURCE] No data found in ESS";
         return Status::InternalError("No data found in ESS ISink::consume");
     }
     std::vector<char> vec = it->second.first;

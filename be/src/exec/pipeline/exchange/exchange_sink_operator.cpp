@@ -334,7 +334,8 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,std::move(chunk_request), attachment,
                               attachment_physical_bytes, _brpc_dest_addr};
     if (_use_external_shuffle_service && !_use_pass_through) { // ignore local shuffles
-        RETURN_IF_ERROR(send_chunks_ess());
+        // A chunk request isn't needed for ESS.
+        return Status::OK();
     } else {
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
     }

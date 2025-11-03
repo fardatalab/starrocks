@@ -244,6 +244,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 }
 
 Status ExchangeSinkOperator::Channel::send_chunks_ess() {
+    if (_chunk_request == nullptr) return Status::OK();
     LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     _ess_ptr->connect(std::move(_ess_endpoint), _fragment_instance_id.lo, _parent->_destinations.size());
     for (auto& chunk_pb : _chunk_request->chunks()) {

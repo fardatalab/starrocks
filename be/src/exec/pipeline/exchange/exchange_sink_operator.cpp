@@ -307,7 +307,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
                                   attachment_physical_bytes, _brpc_dest_addr,};
-        if (_use_external_shuffle_service && !_use_pass_through) { // ignore local shuffles
+        if (_use_external_shuffle_service) { // ignore local shuffles
             RETURN_IF_ERROR(send_chunks_ess());
         } else {
             RETURN_IF_ERROR(_parent->_buffer->add_request(info));
@@ -334,12 +334,11 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     // This TransmitChunk is not transmitted on the network, so we can have a larger struct with not much cost.
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,std::move(chunk_request), attachment,
                               attachment_physical_bytes, _brpc_dest_addr};
-    if (_use_external_shuffle_service && !_use_pass_through) { // ignore local shuffles
+    if (_use_external_shuffle_service) {
         // A chunk request isn't needed for ESS.
         return Status::OK();
-    } else {
-        RETURN_IF_ERROR(_parent->_buffer->add_request(info));
     }
+    RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
 }

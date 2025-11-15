@@ -39,7 +39,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/sorting/merge_path.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
@@ -135,7 +134,6 @@ public:
 
 private:
     friend class DataStreamMgr;
-    friend class pipeline::ExchangeSourceOperator;
     class SenderQueue;
     class NonPipelineSenderQueue;
     class PipelineSenderQueue;

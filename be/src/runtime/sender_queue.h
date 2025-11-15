@@ -59,7 +59,6 @@ public:
     virtual void close() = 0;
 
 protected:
-    friend class pipeline::ExchangeSourceOperator;
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, Metrics& metrics, faststring* uncompressed_buffer);

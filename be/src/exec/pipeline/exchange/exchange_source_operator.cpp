@@ -14,13 +14,12 @@
 
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 
-#include "exec/dictionary_cache_writer.h"
+#include "glog/logging.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/sender_queue.h"
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
@@ -45,38 +44,11 @@ Status ExchangeSourceOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeSourceOperator::pull_ess(std::unique_ptr<Chunk>* chunk_ptr) {
-    // TODO(zhujose1): Determine max_partition_id.
-    LOG(INFO) << "[ESS EXCHANGE SOURCE] Connecting to " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
-    _ess_ptr->connect(std::move(_ess_endpoint), _stream_recvr->fragment_instance_id().lo, -1);
-    // Push based consume from ESS. Assume only 1 chunk is produced.
-    fdl::partition_map_t buffers;
-    LOG(INFO) << "[ESS EXCHANGE SOURCE] Pulling from " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
-    _ess_ptr->consume(&buffers);
-    const auto it = buffers.begin();
-    if (it == buffers.end()) {
-        LOG(WARNING) << "[ESS EXCHANGE SOURCE] No data found in ESS";
-        return Status::InternalError("No data found in ESS ISink::consume");
-    }
-    std::vector<char> vec = it->second.first;
-    ChunkPB chunk_pb;
-    chunk_pb.ParseFromArray(vec.data(), vec.size());
-    faststring uncompressed_buffer;
-    RETURN_IF_ERROR(_stream_recvr->_sender_queues[0]->_deserialize_chunk(
-        chunk_pb, chunk_ptr->get(), _stream_recvr->get_metrics_round_robin(),
-        &uncompressed_buffer));
-    return Status::OK();
-}
-
 StatusOr<ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_unique<Chunk>();
-    if (_use_external_shuffle_service) {
-        RETURN_IF_ERROR(pull_ess(&chunk));
-    } else {
-        RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
-        RETURN_IF_ERROR(eval_no_eq_join_runtime_in_filters(chunk.get()));
-        eval_runtime_bloom_filters(chunk.get());
-    }
+    RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
+    RETURN_IF_ERROR(eval_no_eq_join_runtime_in_filters(chunk.get()));
+    eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
 

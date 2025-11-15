@@ -16,9 +16,6 @@
 
 #include <atomic>
 
-#include "common/config.h"
-#include "exec/pipeline/exchange/TCP/sink.h"
-#include "exec/pipeline/exchange/ISocket.h"
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks {
@@ -28,13 +25,7 @@ namespace pipeline {
 class ExchangeSourceOperator : public SourceOperator {
 public:
     ExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : SourceOperator(factory, id, "exchange_source", plan_node_id, false, driver_sequence),
-              _ess_ptr(std::make_unique<fdl::TCPSink>()),
-              _ess_endpoint{.protocol = fdl::TCP,
-                         .target = {
-                             .addr = std::make_pair<const char*, uint16_t>(
-                                 config::ess_tcp_addr.c_str(), static_cast<uint16_t>(config::ess_tcp_port))}},
-              _use_external_shuffle_service(config::use_ess) {}
+            : SourceOperator(factory, id, "exchange_source", plan_node_id, false, driver_sequence) {}
 
     virtual ~ExchangeSourceOperator() = default;
 
@@ -46,16 +37,11 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    Status pull_ess(std::unique_ptr<Chunk>* chunk_ptr);
-
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
     std::atomic<bool> _is_finishing = false;
-    std::unique_ptr<fdl::ISink> _ess_ptr;
-    const fdl::endpoint_t _ess_endpoint;
-    const bool _use_external_shuffle_service;
 };
 
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {

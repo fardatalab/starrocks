@@ -22,7 +22,6 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
-#include "exec/pipeline/exchange/ISocket.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"

@@ -23,6 +23,7 @@
 #include <queue>
 #include <unordered_set>
 
+#include "exec/pipeline/exchange/ISocket.h"
 #include "column/chunk.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/fragment_context.h"
@@ -195,6 +196,12 @@ private:
     std::atomic<int64_t> _request_sequence = 0;
     int64_t _sent_audit_stats_frequency = 1;
     int64_t _sent_audit_stats_frequency_upper_limit = 64;
+
+    std::unique_ptr<fdl::ISource> _ess_ptr;
+    // Use external shuffle service (DESS).
+    const bool _use_external_shuffle_service;
+
+    const fdl::endpoint_t _ess_endpoint;
 };
 
 } // namespace starrocks::pipeline

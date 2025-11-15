@@ -19,7 +19,10 @@
 #include <chrono>
 #include <string_view>
 
+#include "common/config.h"
 #include "fmt/core.h"
+#include "exec/pipeline/exchange/TCP/source.h"
+#include "exec/pipeline/exchange/ISocket.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -34,7 +37,12 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _is_dest_merge(is_dest_merge),
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
           _sent_audit_stats_frequency_upper_limit(
-                  std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->total_dop() * 4))) {
+                  std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->total_dop() * 4))),
+          _ess_ptr(std::make_unique<fdl::TCPSource>()),
+                    _use_external_shuffle_service(config::use_ess),
+                    _ess_endpoint{.protocol = fdl::TCP,
+                                  .target = {.addr = std::make_pair<const char*, uint16_t>(
+                              config::ess_tcp_addr.c_str(), static_cast<uint16_t>(config::ess_tcp_port))}} {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -442,6 +450,21 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
 Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
                              const TransmitChunkInfo& request) {
+    if (_use_external_shuffle_service) {
+        LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+        _ess_ptr->connect(std::move(_ess_endpoint), _fragment_ctx->query_id().lo, _fragment_ctx->runtime_state()->query_ctx()->total_fragments());
+        for (auto& chunk_pb : request.params->chunks()) {
+            // TODO(zhujose1): Or send the attachment? Same data just in different format.
+            LOG(INFO) << "[ESS EXCHANGE SINK] Sending FRAGMENT ID=" << request.fragment_instance_id.lo << " of size " << chunk_pb.data_size() << "B to "
+                      << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+            _ess_ptr->send(request.fragment_instance_id.lo, chunk_pb.data().c_str(), chunk_pb.data_size());
+            LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending FRAGMENT ID=" << request.fragment_instance_id.lo << " of size " << chunk_pb.data_size() << "B to "
+                      << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+        }
+        LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+        _ess_ptr->close();
+        return Status::OK();
+    }
     auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
     if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
         butil::IOBuf iobuf;

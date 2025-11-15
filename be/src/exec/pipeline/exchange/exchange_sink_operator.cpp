@@ -181,25 +181,23 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         return Status::OK();
     }
 
-    if (!_use_external_shuffle_service) {
-        if (_brpc_dest_addr.hostname.empty()) {
-            LOG(WARNING) << "there is no brpc destination address's hostname"
-                        ", maybe version is not compatible.";
-            return Status::InternalError("no brpc destination");
-        }
-        // _brpc_timeout_ms = std::min(3600, state->query_options().query_timeout) * 1000;
-        // For bucket shuffle, the dest is unreachable, there is no need to establish a connection
-        if (_fragment_instance_id.lo == -1) {
-            _is_inited = true;
-            return Status::OK();
-        }
-        _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    if (_brpc_dest_addr.hostname.empty()) {
+        LOG(WARNING) << "there is no brpc destination address's hostname"
+                    ", maybe version is not compatible.";
+        return Status::InternalError("no brpc destination");
+    }
+    // _brpc_timeout_ms = std::min(3600, state->query_options().query_timeout) * 1000;
+    // For bucket shuffle, the dest is unreachable, there is no need to establish a connection
+    if (_fragment_instance_id.lo == -1) {
+        _is_inited = true;
+        return Status::OK();
+    }
+    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
 
-        if (_brpc_stub == nullptr) {
-            auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
-        }
+    if (_brpc_stub == nullptr) {
+        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
     }
 
     if (_use_external_shuffle_service) {
@@ -219,6 +217,7 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
 
 Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t driver_sequence, const uint32_t* indexes,
                                                          uint32_t from, uint32_t size, RuntimeState* state) {
+    LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::add_rows_selective";
     if (UNLIKELY(_chunks[driver_sequence] == nullptr)) {
         _chunks[driver_sequence] = chunk->clone_empty_with_slot(size);
     }
@@ -244,7 +243,11 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 }
 
 Status ExchangeSinkOperator::Channel::send_chunks_ess() {
-    if (_chunk_request == nullptr) return Status::OK();
+    LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_chunks_ess";
+    if (_chunk_request == nullptr) {
+        LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_chunks_ess: Returning dur to _chunk_request == nullptr.";
+        return Status::OK();
+    }
     LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     _ess_ptr->connect(std::move(_ess_endpoint), _fragment_instance_id.lo, _parent->_destinations.size());
     for (auto& chunk_pb : _chunk_request->chunks()) {
@@ -261,9 +264,11 @@ Status ExchangeSinkOperator::Channel::send_chunks_ess() {
 
 Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const Chunk* chunk, int32_t driver_sequence,
                                                      bool eos, bool* is_real_sent) {
+    LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_one_chunk";
     *is_real_sent = false;
 
     if (_ignore_local_data && !eos) {
+        LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_one_chunk: Returning due to local data OR eos.";
         return Status::OK();
     }
 
@@ -282,19 +287,23 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
+            LOG(INFO) << "[ESS EXCHANGE SINK] Passthrough: Adding chunks";
             TRY_CATCH_BAD_ALLOC(
                     _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
                                                        _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
             _current_request_bytes += chunk_size;
+            LOG(INFO) << "[ESS EXCHANGE SINK] Passthrough: _current_request_bytes=" << _current_request_bytes;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
             COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
         } else {
             if (_parent->_is_pipeline_level_shuffle) {
                 _chunk_request->add_driver_sequences(driver_sequence);
             }
+            LOG(INFO) << "[ESS EXCHANGE SINK] Non-passthrough: Adding chunks";
             auto pchunk = _chunk_request->add_chunks();
             TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
             _current_request_bytes += pchunk->data().size();
+            LOG(INFO) << "[ESS EXCHANGE SINK] Non-passthrough: _current_request_bytes=" << _current_request_bytes;
         }
     }
 
@@ -303,13 +312,14 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
-        butil::IOBuf attachment;
-        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
-                                  attachment_physical_bytes, _brpc_dest_addr,};
-        if (_use_external_shuffle_service) { // ignore local shuffles
+        if (_use_external_shuffle_service && !_use_pass_through) { // ignore local shuffles
             RETURN_IF_ERROR(send_chunks_ess());
         } else {
+            butil::IOBuf attachment;
+            int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
+            TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
+                                      attachment_physical_bytes, _brpc_dest_addr,};
+            LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_one_chunk: Adding to sink buffer...";
             RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         }
         _current_request_bytes = 0;
@@ -323,6 +333,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
                                                          const butil::IOBuf& attachment,
                                                          int64_t attachment_physical_bytes) {
+    LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_chunk_request";
     if (_ignore_local_data) {
         return Status::OK();
     }
@@ -331,13 +342,16 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
+    if (_use_external_shuffle_service && !_use_pass_through) {
+        // A chunk request isn't needed for ESS.
+        LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_chunk_request: Returning since chunk request not needed for ESS";
+        return Status::OK();
+    }
+
     // This TransmitChunk is not transmitted on the network, so we can have a larger struct with not much cost.
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,std::move(chunk_request), attachment,
                               attachment_physical_bytes, _brpc_dest_addr};
-    if (_use_external_shuffle_service) {
-        // A chunk request isn't needed for ESS.
-        return Status::OK();
-    }
+    LOG(INFO) << "[ESS EXCHANGE SINK] ExchangeSinkOperator::Channel::send_chunk_request: Adding to sink buffer...";
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();

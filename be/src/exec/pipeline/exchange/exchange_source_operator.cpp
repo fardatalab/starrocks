@@ -71,10 +71,8 @@ Status ExchangeSourceOperator::pull_ess(std::unique_ptr<Chunk>* chunk_ptr) {
 StatusOr<ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_unique<Chunk>();
     if (_use_external_shuffle_service) {
-        LOG(INFO) << "[ESS EXCHANGE SOURCE] ExchangeSourceOperator::pull_chunk: Pulling from ESS";
         RETURN_IF_ERROR(pull_ess(&chunk));
     } else {
-        LOG(INFO) << "[ESS EXCHANGE SOURCE] ExchangeSourceOperator::pull_chunk: Pulling from non-ESS";
         RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
         RETURN_IF_ERROR(eval_no_eq_join_runtime_in_filters(chunk.get()));
         eval_runtime_bloom_filters(chunk.get());

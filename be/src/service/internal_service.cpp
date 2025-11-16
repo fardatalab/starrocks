@@ -1291,6 +1291,14 @@ void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::Rpc
     _exec_env->batch_write_mgr()->update_transaction_state(request, response);
 }
 
+template <typename T>
+void PInternalServiceImplBase<T>::receive_ess_data(google::protobuf::RpcController* cntl_base,
+                                                           const PReceiveEssDataRequest* request,
+                                                           PReceiveEssDataResponse* response,
+                                                           google::protobuf::Closure* done) {
+    LOG(INFO) << "ESS RPC receive_ess_data test";
+}
+
 template class PInternalServiceImplBase<PInternalService>;
 template class PInternalServiceImplBase<doris::PBackendService>;
 

@@ -190,6 +190,10 @@ public:
                                   const PUpdateTransactionStateRequest* request,
                                   PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
 
+    void receive_ess_data(google::protobuf::RpcController* cntl_base,
+                                                           const PReceiveEssDataRequest* request,
+                                                           PReceiveEssDataResponse* response,
+                                                           google::protobuf::Closure* done) override;
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,

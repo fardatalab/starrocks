@@ -86,4 +86,6 @@ service PBackendService {
     rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
     rpc stream_load(starrocks.PStreamLoadRequest) returns (starrocks.PStreamLoadResponse);
     rpc update_transaction_state(starrocks.PUpdateTransactionStateRequest) returns (starrocks.PUpdateTransactionStateResponse);
+
+    rpc receive_ess_data(starrocks.PReceiveEssDataRequest) returns (starrocks.PReceiveEssDataResponse);
 };

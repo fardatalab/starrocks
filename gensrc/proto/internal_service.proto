@@ -670,6 +670,13 @@ message PUpdateTransactionStateResponse {
     repeated StatusPB results = 1;
 }
 
+message PReceiveEssDataRequest {
+}
+
+message PReceiveEssDataResponse {
+    optional StatusPB status = 1;
+}
+
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -719,4 +726,7 @@ service PInternalService {
     rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
+
+    // Empty ping to receive data from ESS.
+    rpc receive_ess_data(PReceiveEssDataRequest) returns (PReceiveEssDataResponse);
 };

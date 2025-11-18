@@ -451,17 +451,29 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
                              const TransmitChunkInfo& request) {
     if (_use_external_shuffle_service) {
-        LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
-        _ess_ptr->connect(std::move(_ess_endpoint), _fragment_ctx->query_id().lo, _fragment_ctx->runtime_state()->query_ctx()->total_fragments());
+        // const size_t total_fragments = _fragment_ctx->runtime_state()->query_ctx()->total_fragments();
+        // const fdl::partition_id_t partition_id  = request.fragment_instance_id.lo;
+        // NOTE(zhujose1): Hardcoding this for now since I can't find the number of BE nodes in the code
+        constexpr size_t total_fragments = 8;
+        const fdl::job_id_t job_id = _fragment_ctx->query_id().lo;
+        // We assume be_number is a contiguous set here, so mod is OK.
+        const fdl::partition_id_t partition_id = _fragment_ctx->runtime_state()->be_number() % total_fragments;
+
+        std::stringstream ss;
+        ss << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+        const std::string ess_endpoint_str = ss.str();
+        LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << ess_endpoint_str
+                  << " with JOB ID=" << job_id << " MAX_PARTITION=" << total_fragments;
+        _ess_ptr->connect(std::move(_ess_endpoint), job_id, total_fragments);
         for (auto& chunk_pb : request.params->chunks()) {
             // TODO(zhujose1): Or send the attachment? Same data just in different format.
-            LOG(INFO) << "[ESS EXCHANGE SINK] Sending FRAGMENT ID=" << request.fragment_instance_id.lo << " of size " << chunk_pb.data_size() << "B to "
-                      << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
-            _ess_ptr->send(request.fragment_instance_id.lo, chunk_pb.data().c_str(), chunk_pb.data_size());
-            LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending FRAGMENT ID=" << request.fragment_instance_id.lo << " of size " << chunk_pb.data_size() << "B to "
-                      << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+            LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
+                      << ess_endpoint_str;
+            _ess_ptr->send(partition_id, chunk_pb.data().c_str(), chunk_pb.data_size());
+            LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
+                      << ess_endpoint_str;
         }
-        LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+        LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << ess_endpoint_str;
         _ess_ptr->close();
         return Status::OK();
     }

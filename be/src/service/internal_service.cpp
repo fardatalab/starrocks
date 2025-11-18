@@ -1297,7 +1297,7 @@ void PInternalServiceImplBase<T>::receive_ess_data(google::protobuf::RpcControll
                                                            PReceiveEssDataResponse* response,
                                                            google::protobuf::Closure* done) {
     LOG(INFO) << "[DESS] receive_ess_data test";
-    _exec_env->stream_mgr()->receive_from_ess().to_protobuf(response->mutable_status());
+    _exec_env->stream_mgr()->receive_from_ess(request->query_id()).to_protobuf(response->mutable_status());
 }
 
 template class PInternalServiceImplBase<PInternalService>;

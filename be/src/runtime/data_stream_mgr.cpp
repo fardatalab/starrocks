@@ -259,10 +259,10 @@ PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniq
     return _pass_through_chunk_buffer_manager.get(query_id);
 }
 
-Status DataStreamMgr::receive_from_ess() {
+Status DataStreamMgr::receive_from_ess(const int query_id) {
     // TODO(zhujose1): Need to pass query id from ping
     // NOTE(zhujose1): max_partition_id is hardcoded for now
-    _ess_ptr->connect(std::move(_ess_endpoint), 0, 8);
+    _ess_ptr->connect(std::move(_ess_endpoint), query_id, 8);
     // TODO(zhujose1): partition_id will soon be BackendOptions::get_localhost()
     vector<fdl::partition_id_t> partitions = {0};
     fdl::partition_map_t result;

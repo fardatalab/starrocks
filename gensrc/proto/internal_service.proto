@@ -671,6 +671,7 @@ message PUpdateTransactionStateResponse {
 }
 
 message PReceiveEssDataRequest {
+    optional int32 query_id = 1;
 }
 
 message PReceiveEssDataResponse {

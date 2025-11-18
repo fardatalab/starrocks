@@ -37,15 +37,23 @@
 #include <iostream>
 #include <utility>
 
+#include "common/config.h"
+#include "exec/pipeline/exchange/TCP/sink.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
+#include "service/backend_options.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
-DataStreamMgr::DataStreamMgr() {
+DataStreamMgr::DataStreamMgr() :
+    _ess_ptr(std::make_unique<fdl::TCPSink>()),
+                    _use_external_shuffle_service(config::use_ess),
+                    _ess_endpoint{.protocol = fdl::TCP,
+                                  .target = {.addr = std::make_pair<const char*, uint16_t>(
+                              config::ess_tcp_addr.c_str(), static_cast<uint16_t>(config::ess_tcp_port))}} {
     REGISTER_GAUGE_STARROCKS_METRIC(data_stream_receiver_count, [this]() { return _receiver_count.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(fragment_endpoint_count, [this]() { return _fragment_count.load(); });
 }
@@ -251,4 +259,33 @@ PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniq
     return _pass_through_chunk_buffer_manager.get(query_id);
 }
 
+Status DataStreamMgr::receive_from_ess() {
+    // TODO(zhujose1): Need to pass query id from ping
+    // NOTE(zhujose1): max_partition_id is hardcoded for now
+    _ess_ptr->connect(std::move(_ess_endpoint), 0, 8);
+    // TODO(zhujose1): partition_id will soon be BackendOptions::get_localhost()
+    vector<fdl::partition_id_t> partitions = {0};
+    fdl::partition_map_t result;
+    _ess_ptr->receive(std::move(partitions), &result);
+    // construct result
+    const auto it = result.begin();
+    if (it == result.end()) {
+        LOG(ERROR) << "No data found in DataStreamMgr::receive_from_ess";
+    }
+    // At the moment we only expect a single buffer to be received
+    vector<char> chunk_pb_data = it->second.first;
+    ChunkPB chunk_pb;
+    chunk_pb.ParseFromArray(chunk_pb_data.data(), chunk_pb_data.size());
+    // TODO(zhujose1): Get fragment_id, node_id
+    std::shared_ptr<DataStreamRecvr> recvr = find_recvr({}, -1);
+    // TODO(zhujose1): eos (data_stream_mgr.cpp:168)
+    PTransmitChunkParams request;
+    request.mutable_chunks()->Add(std::move(chunk_pb));
+    // TODO(zhujose1): Need to fill in be_number, sequence, sender_id, chunks_size in request
+    if (request.chunks_size() > 0) {
+        RETURN_IF_ERROR(recvr->add_chunks(request, nullptr));
+    }
+
+    return Status::OK();
+}
 } // namespace starrocks

@@ -45,6 +45,7 @@
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exec/pipeline/exchange/ISocket.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "runtime/descriptors.h" // for PlanNodeId
@@ -107,6 +108,9 @@ public:
     void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
     PassThroughChunkBuffer* get_pass_through_chunk_buffer(const TUniqueId& query_id);
 
+    // Calls ESS to receive a chunk intended for this BE node.
+    Status receive_from_ess();
+
 private:
     friend class DataStreamRecvr;
     static const uint32_t BUCKET_NUM = 127;
@@ -134,6 +138,12 @@ private:
     inline uint32_t get_bucket(const TUniqueId& fragment_instance_id);
 
     PassThroughChunkBufferManager _pass_through_chunk_buffer_manager;
+
+    std::unique_ptr<fdl::ISink> _ess_ptr;
+    // Use external shuffle service (DESS).
+    const bool _use_external_shuffle_service;
+
+    const fdl::endpoint_t _ess_endpoint;
 };
 
 } // namespace starrocks

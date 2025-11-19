@@ -266,7 +266,8 @@ Status DataStreamMgr::receive_from_ess(const int query_id) {
     sockaddr_in our_sockaddr;
     // We use port 0 to follow SinkBuffer.
     RETURN_ERROR_IF_FALSE(fdl::stringToSockaddr(BackendOptions::get_localhost(), 0, our_sockaddr));
-    vector partitions = { *reinterpret_cast<const __int128_t*>(&our_sockaddr) };
+    fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(our_sockaddr);
+    vector partitions = { encoded_sockaddr };
     fdl::response_map_t result;
     _ess_ptr->receive(std::move(partitions), &result);
     // construct result

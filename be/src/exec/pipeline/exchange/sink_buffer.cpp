@@ -470,11 +470,12 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         sockaddr_in dest_sockaddr;
         // We use port 0 since it's unused.
         RETURN_ERROR_IF_FALSE(fdl::stringToSockaddr(request.brpc_addr.hostname, 0, dest_sockaddr));
+        fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(dest_sockaddr);
         for (auto& chunk_pb : request.params->chunks()) {
             // TODO(zhujose1): Or send the attachment? Same data just in different format.
             LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
                       << ess_endpoint_str;
-            _ess_ptr->send(*reinterpret_cast<const __int128_t*>(&dest_sockaddr), chunk_pb.data().c_str(), chunk_pb.data_size());
+            _ess_ptr->send(encoded_sockaddr, chunk_pb.data().c_str(), chunk_pb.data_size());
             LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
                       << ess_endpoint_str;
         }

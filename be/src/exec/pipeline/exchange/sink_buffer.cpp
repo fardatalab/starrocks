@@ -23,6 +23,7 @@
 #include "fmt/core.h"
 #include "exec/pipeline/exchange/DESS/src/client/TCP/source.h"
 #include "exec/pipeline/exchange/DESS/src/client/ISocket.h"
+#include "exec/pipeline/exchange/DESS/include/utils/sockaddr_conversion.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -465,11 +466,15 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << ess_endpoint_str
                   << " with JOB ID=" << job_id << " MAX_PARTITION=" << total_fragments;
         _ess_ptr->connect(std::move(_ess_endpoint), job_id, total_fragments);
+        // Create the target_id when sending chunks. dest ip is in request.brpc_addr.hostname!
+        sockaddr_in dest_sockaddr;
+        // We use port 0 since it's unused.
+        RETURN_ERROR_IF_FALSE(fdl::stringToSockaddr(request.brpc_addr.hostname, 0, dest_sockaddr));
         for (auto& chunk_pb : request.params->chunks()) {
             // TODO(zhujose1): Or send the attachment? Same data just in different format.
             LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
                       << ess_endpoint_str;
-            _ess_ptr->send(partition_id, chunk_pb.data().c_str(), chunk_pb.data_size());
+            _ess_ptr->send(*reinterpret_cast<const __int128_t*>(&dest_sockaddr), chunk_pb.data().c_str(), chunk_pb.data_size());
             LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
                       << ess_endpoint_str;
         }

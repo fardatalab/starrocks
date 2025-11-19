@@ -38,6 +38,7 @@
 #include <utility>
 
 #include "common/config.h"
+#include "exec/pipeline/exchange/DESS/include/utils/sockaddr_conversion.h"
 #include "exec/pipeline/exchange/DESS/src/client/TCP/sink.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
@@ -260,12 +261,13 @@ PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniq
 }
 
 Status DataStreamMgr::receive_from_ess(const int query_id) {
-    // TODO(zhujose1): Need to pass query id from ping
     // NOTE(zhujose1): max_partition_id is hardcoded for now
     _ess_ptr->connect(std::move(_ess_endpoint), query_id, 8);
-    // TODO(zhujose1): partition_id will soon be BackendOptions::get_localhost()
-    vector<fdl::partition_id_t> partitions = {0};
-    fdl::partition_map_t result;
+    sockaddr_in our_sockaddr;
+    // We use port 0 to follow SinkBuffer.
+    RETURN_ERROR_IF_FALSE(fdl::stringToSockaddr(BackendOptions::get_localhost(), 0, our_sockaddr));
+    vector partitions = { *reinterpret_cast<const __int128_t*>(&our_sockaddr) };
+    fdl::response_map_t result;
     _ess_ptr->receive(std::move(partitions), &result);
     // construct result
     const auto it = result.begin();

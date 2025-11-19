@@ -23,7 +23,7 @@
 #include <queue>
 #include <unordered_set>
 
-#include "exec/pipeline/exchange/ISocket.h"
+#include "exec/pipeline/exchange/DESS/src/client/ISocket.h"
 #include "column/chunk.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/fragment_context.h"

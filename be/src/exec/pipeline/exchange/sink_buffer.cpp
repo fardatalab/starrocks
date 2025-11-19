@@ -21,8 +21,8 @@
 
 #include "common/config.h"
 #include "fmt/core.h"
-#include "exec/pipeline/exchange/TCP/source.h"
-#include "exec/pipeline/exchange/ISocket.h"
+#include "exec/pipeline/exchange/DESS/src/client/TCP/source.h"
+#include "exec/pipeline/exchange/DESS/src/client/ISocket.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/uid_util.h"

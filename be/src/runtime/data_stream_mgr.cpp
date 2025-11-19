@@ -38,7 +38,7 @@
 #include <utility>
 
 #include "common/config.h"
-#include "exec/pipeline/exchange/TCP/sink.h"
+#include "exec/pipeline/exchange/DESS/src/client/TCP/sink.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"

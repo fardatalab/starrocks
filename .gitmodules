@@ -1,0 +1,3 @@
+[submodule "be/src/exec/pipeline/exchange/DESS"]
+	path = be/src/exec/pipeline/exchange/DESS
+	url = git@github.com:fardatalab/DESS.git

@@ -45,7 +45,7 @@
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exec/pipeline/exchange/ISocket.h"
+#include "exec/pipeline/exchange/DESS/src/client/ISocket.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "runtime/descriptors.h" // for PlanNodeId

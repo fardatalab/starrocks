@@ -457,9 +457,6 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         // NOTE(zhujose1): Hardcoding this for now since I can't find the number of BE nodes in the code
         constexpr size_t total_fragments = 8;
         const fdl::job_id_t job_id = _fragment_ctx->query_id().lo;
-        // We assume be_number is a contiguous set here, so mod is OK.
-        const fdl::partition_id_t partition_id = _fragment_ctx->runtime_state()->be_number() % total_fragments;
-
         std::stringstream ss;
         ss << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
         const std::string ess_endpoint_str = ss.str();
@@ -473,10 +470,10 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(dest_sockaddr);
         for (auto& chunk_pb : request.params->chunks()) {
             // TODO(zhujose1): Or send the attachment? Same data just in different format.
-            LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
+            LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << chunk_pb.data_size() << "B to "
                       << ess_endpoint_str;
             _ess_ptr->send(encoded_sockaddr, chunk_pb.data().c_str(), chunk_pb.data_size());
-            LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << partition_id << " of size " << chunk_pb.data_size() << "B to "
+            LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << request.brpc_addr.hostname << " of size " << chunk_pb.data_size() << "B to "
                       << ess_endpoint_str;
         }
         LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << ess_endpoint_str;

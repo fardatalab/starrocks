@@ -468,14 +468,25 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         // We use port 0 since it's unused.
         RETURN_ERROR_IF_FALSE(fdl::stringToSockaddr(request.brpc_addr.hostname, 0, dest_sockaddr));
         fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(dest_sockaddr);
-        for (auto& chunk_pb : request.params->chunks()) {
-            // TODO(zhujose1): Or send the attachment? Same data just in different format.
-            LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << chunk_pb.data_size() << "B to "
-                      << ess_endpoint_str;
-            _ess_ptr->send(encoded_sockaddr, chunk_pb.data().c_str(), chunk_pb.data_size());
-            LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << request.brpc_addr.hostname << " of size " << chunk_pb.data_size() << "B to "
-                      << ess_endpoint_str;
-        }
+
+        // NOTE(zhujose1): New method to send data to ESS. Send the entire proto so we don't have to worry about metadata.
+        size_t request_size = request.params->ByteSizeLong();
+        std::vector<char> request_buffer(request_size);
+        char* char_buffer = request_buffer.data();
+        RETURN_ERROR_IF_FALSE(request.params->SerializeToArray(char_buffer, request_size));
+        LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << request_size << "B to "
+                  << ess_endpoint_str;
+        _ess_ptr->send(encoded_sockaddr, char_buffer, request_size);
+        LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << request.brpc_addr.hostname << " of size " << request_size << "B to "
+                  << ess_endpoint_str;
+        // for (auto& chunk_pb : request.params->chunks()) {
+        //     // TODO(zhujose1): Or send the attachment? Same data just in different format.
+        //     LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << chunk_pb.data_size() << "B to "
+        //               << ess_endpoint_str;
+        //     _ess_ptr->send(encoded_sockaddr, chunk_pb.data().c_str(), chunk_pb.data_size());
+        //     LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << request.brpc_addr.hostname << " of size " << chunk_pb.data_size() << "B to "
+        //               << ess_endpoint_str;
+        // }
         LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << ess_endpoint_str;
         _ess_ptr->close();
         return Status::OK();

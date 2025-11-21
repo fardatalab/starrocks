@@ -276,19 +276,12 @@ Status DataStreamMgr::receive_from_ess(const int query_id) {
         LOG(ERROR) << "No data found in DataStreamMgr::receive_from_ess";
     }
     // At the moment we only expect a single buffer to be received
-    vector<char> chunk_pb_data = it->second.first;
-    ChunkPB chunk_pb;
-    chunk_pb.ParseFromArray(chunk_pb_data.data(), chunk_pb_data.size());
-    // TODO(zhujose1): Get fragment_id, node_id
-    std::shared_ptr<DataStreamRecvr> recvr = find_recvr({}, -1);
-    // TODO(zhujose1): eos (data_stream_mgr.cpp:168)
-    PTransmitChunkParams request;
-    request.mutable_chunks()->Add(std::move(chunk_pb));
-    // TODO(zhujose1): Need to fill in be_number, sequence, sender_id, chunks_size in request
-    if (request.chunks_size() > 0) {
-        RETURN_IF_ERROR(recvr->add_chunks(request, nullptr));
-    }
+    vector<char> result_pb_data = it->second.first;
+    PTransmitChunkParams result_pb;
+    result_pb.ParseFromArray(result_pb_data.data(), result_pb_data.size());
 
-    return Status::OK();
+    // Pass it to the classic flow
+    // TODO(zhujose1): Handle multiple protos in one receive
+    return transmit_chunk(result_pb, nullptr);
 }
 } // namespace starrocks

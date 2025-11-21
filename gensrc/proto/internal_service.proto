@@ -671,7 +671,8 @@ message PUpdateTransactionStateResponse {
 }
 
 message PReceiveEssDataRequest {
-    optional int32 query_id = 1;
+    // fdl::job_id_t is a uint32
+    optional uint32 query_id = 1;
 }
 
 message PReceiveEssDataResponse {

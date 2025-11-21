@@ -109,7 +109,7 @@ public:
     PassThroughChunkBuffer* get_pass_through_chunk_buffer(const TUniqueId& query_id);
 
     // Calls ESS to receive a chunk intended for this BE node.
-    Status receive_from_ess(int query_id);
+    Status receive_from_ess(fdl::job_id_t query_id);
 
 private:
     friend class DataStreamRecvr;

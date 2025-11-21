@@ -1296,7 +1296,7 @@ void PInternalServiceImplBase<T>::receive_ess_data(google::protobuf::RpcControll
                                                            const PReceiveEssDataRequest* request,
                                                            PReceiveEssDataResponse* response,
                                                            google::protobuf::Closure* done) {
-    LOG(INFO) << "[DESS] receive ping for query_id: " << request->query_id();
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Received ping for query_id: " << request->query_id();
     _exec_env->stream_mgr()->receive_from_ess(request->query_id()).to_protobuf(response->mutable_status());
 }
 

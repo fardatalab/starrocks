@@ -475,7 +475,7 @@ Status SinkBuffer::_send_ess(const TransmitChunkInfo &request) const {
     LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << request_size << "B to "
             << ess_endpoint_str;
     _ess_ptr->send(encoded_sockaddr, char_buffer, request_size);
-    LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending ending PARTITION ID=" << request.brpc_addr.hostname << " of size " << request_size << "B to "
+    LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << request_size << "B to "
             << ess_endpoint_str;
     LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << ess_endpoint_str;
     _ess_ptr->close();

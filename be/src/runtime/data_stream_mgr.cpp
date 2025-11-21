@@ -260,13 +260,13 @@ PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniq
     return _pass_through_chunk_buffer_manager.get(query_id);
 }
 
-Status DataStreamMgr::receive_from_ess(const int query_id) {
+Status DataStreamMgr::receive_from_ess(const fdl::job_id_t query_id) {
     // NOTE(zhujose1): max_partition_id is hardcoded for now
     constexpr size_t total_nodes = 8;
     std::stringstream ss;
     ss << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     const std::string ess_endpoint_str = ss.str();
-    LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << ess_endpoint_str
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Connecting to " << ess_endpoint_str
           << " with JOB ID=" << query_id << " MAX_PARTITION=" << total_nodes;
     _ess_ptr->connect(std::move(_ess_endpoint), query_id, total_nodes);
     sockaddr_in our_sockaddr;
@@ -275,24 +275,24 @@ Status DataStreamMgr::receive_from_ess(const int query_id) {
     fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(our_sockaddr);
     vector partitions = { encoded_sockaddr };
     fdl::response_map_t result;
-    LOG(INFO) << "Receiving from ESS for query_id=" << query_id << ", PARTITION ID= "
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Receiving for query_id=" << query_id << ", PARTITION ID= "
               << BackendOptions::get_localhost();
     _ess_ptr->receive(std::move(partitions), &result);
     // construct result
     const auto it = result.begin();
     if (it == result.end()) {
-        LOG(ERROR) << "No data found in DataStreamMgr::receive_from_ess";
+        LOG(ERROR) << "[ESS EXCHANGE SOURCE] No data found in DataStreamMgr::receive_from_ess";
     }
     // At the moment we only expect a single buffer to be received
     vector<char> result_pb_data = it->second.first;
     PTransmitChunkParams result_pb;
     result_pb.ParseFromArray(result_pb_data.data(), result_pb_data.size());
-    LOG(INFO) << "Finished receiving from ESS for query_id=" << query_id << ", PARTITION ID= "
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Finished receiving for query_id=" << query_id << ", PARTITION ID="
               << BackendOptions::get_localhost() << ", received " << result_pb_data.size() << "B";
 
     // Pass it to the classic flow
     // TODO(zhujose1): Handle multiple protos in one receive
-    LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << ess_endpoint_str;
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Disconnecting from " << ess_endpoint_str;
     _ess_ptr->close();
     return transmit_chunk(result_pb, nullptr);
 }

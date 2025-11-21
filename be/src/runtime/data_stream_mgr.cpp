@@ -264,8 +264,8 @@ Status DataStreamMgr::receive_from_ess(const int query_id) {
     // NOTE(zhujose1): max_partition_id is hardcoded for now
     constexpr size_t total_nodes = 8;
     std::stringstream ss;
-    const std::string ess_endpoint_str = ss.str();
     ss << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
+    const std::string ess_endpoint_str = ss.str();
     LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << ess_endpoint_str
           << " with JOB ID=" << query_id << " MAX_PARTITION=" << total_nodes;
     _ess_ptr->connect(std::move(_ess_endpoint), query_id, total_nodes);
@@ -275,10 +275,9 @@ Status DataStreamMgr::receive_from_ess(const int query_id) {
     fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(our_sockaddr);
     vector partitions = { encoded_sockaddr };
     fdl::response_map_t result;
-    LOG(INFO) << "Start receiving from ESS for query_id=" << query_id << " at "
-              << BackendOptions::get_localhost() << ":" << our_sockaddr.sin_port;
+    LOG(INFO) << "Receiving from ESS for query_id=" << query_id << ", PARTITION ID= "
+              << BackendOptions::get_localhost();
     _ess_ptr->receive(std::move(partitions), &result);
-    LOG(INFO) << "Finished receiving from ESS for query_id=" << query_id << ", received " << result.size() << "B.";
     // construct result
     const auto it = result.begin();
     if (it == result.end()) {
@@ -288,6 +287,8 @@ Status DataStreamMgr::receive_from_ess(const int query_id) {
     vector<char> result_pb_data = it->second.first;
     PTransmitChunkParams result_pb;
     result_pb.ParseFromArray(result_pb_data.data(), result_pb_data.size());
+    LOG(INFO) << "Finished receiving from ESS for query_id=" << query_id << ", PARTITION ID= "
+              << BackendOptions::get_localhost() << ", received " << result_pb_data.size() << "B";
 
     // Pass it to the classic flow
     // TODO(zhujose1): Handle multiple protos in one receive

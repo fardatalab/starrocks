@@ -273,7 +273,7 @@ Status DataStreamMgr::receive_from_ess(const fdl::job_id_t query_id) {
     // We use port 0 to follow SinkBuffer.
     RETURN_ERROR_IF_FALSE(fdl::stringToSockaddr(BackendOptions::get_localhost(), 0, our_sockaddr));
     fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(our_sockaddr);
-    vector partitions = { encoded_sockaddr };
+    vector partitions { encoded_sockaddr };
     fdl::response_map_t result;
     LOG(INFO) << "[ESS EXCHANGE SOURCE] Receiving for query_id=" << query_id << ", PARTITION ID= "
               << BackendOptions::get_localhost();

@@ -279,16 +279,20 @@ Status DataStreamMgr::receive_from_ess(const fdl::job_id_t query_id) {
               << BackendOptions::get_localhost();
     _ess_ptr->receive(std::move(partitions), &result);
     // construct result
-    const auto it = result.begin();
-    if (it == result.end()) {
+    if (result.empty()) {
         LOG(ERROR) << "[ESS EXCHANGE SOURCE] No data found in DataStreamMgr::receive_from_ess";
+        return Status::NotFound("No data received from ESS");
     }
     // At the moment we only expect a single buffer to be received
-    vector<char> result_pb_data = it->second.first;
+    CHECK(result.contains(encoded_sockaddr));
+    const std::vector<char>& result_pb_data = result[encoded_sockaddr].first;
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Received buffer size: " << result_pb_data.size() << "B for query_id=" << query_id;
+
     PTransmitChunkParams result_pb;
-    result_pb.ParseFromArray(result_pb_data.data(), result_pb_data.size());
-    LOG(INFO) << "[ESS EXCHANGE SOURCE] Finished receiving for query_id=" << query_id << ", PARTITION ID="
-              << BackendOptions::get_localhost() << ", received " << result_pb_data.size() << "B";
+    if (!result_pb.ParseFromArray(result_pb_data.data(), result_pb_data.size())) {
+        LOG(ERROR) << "[ESS EXCHANGE SOURCE] Failed to parse PTransmitChunkParams for query_id=" << query_id;
+        return Status::InternalError("Failed to parse PTransmitChunkParams from ESS data");
+    }
 
     // Pass it to the classic flow
     // TODO(zhujose1): Handle multiple protos in one receive

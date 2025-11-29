@@ -286,11 +286,13 @@ Status DataStreamMgr::receive_from_ess(const fdl::job_id_t query_id) {
     // At the moment we only expect a single buffer to be received
     CHECK(result.contains(encoded_sockaddr));
     const std::vector<char>& result_pb_data = result[encoded_sockaddr].first;
-    LOG(INFO) << "[ESS EXCHANGE SOURCE] Received buffer size: " << result_pb_data.size() << "B for query_id=" << query_id;
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] Received buffer size: " << result_pb_data.size() << "B for query_id=" << query_id << ", PARTITION ID= "
+              << BackendOptions::get_localhost();
 
     PTransmitChunkParams result_pb;
     if (!result_pb.ParseFromArray(result_pb_data.data(), result_pb_data.size())) {
-        LOG(ERROR) << "[ESS EXCHANGE SOURCE] Failed to parse PTransmitChunkParams for query_id=" << query_id;
+        LOG(ERROR) << "[ESS EXCHANGE SOURCE] Failed to parse PTransmitChunkParams for query_id=" << query_id << ", PARTITION ID= "
+                   << BackendOptions::get_localhost();
         return Status::InternalError("Failed to parse PTransmitChunkParams from ESS data");
     }
 

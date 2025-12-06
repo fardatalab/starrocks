@@ -48,14 +48,19 @@
 #include "util/starrocks_metrics.h"
 namespace {
     constexpr uint32_t simple_int128_checksum(const __int128_t n) {
-        const uint64_t high_bits = (uint64_t)(n >> 64);
-        const uint64_t low_bits  = (uint64_t)n;
+        // 1. Separate the 128-bit number into its 64-bit halves.
+        const auto high_bits = (uint64_t)(n >> 64);
+        const auto low_bits  = (uint64_t)n;
+        uint64_t combined = high_bits ^ low_bits;
+        combined ^= (combined >> 33);
+        combined *= 0xff51afd7ed558ccdULL;
+        combined ^= (combined >> 33);
+        combined *= 0xc4ce7b99a6358c2fULL;
+        combined ^= (combined >> 33);
+        const auto upper_32 = (uint32_t)(combined >> 32);
+        const auto lower_32 = (uint32_t)combined;
 
-        // 2. Combine the two halves using XOR.
-        const uint64_t combined = high_bits ^ low_bits;
-
-        // 3. Extract the desired 32 bits (4 bytes).
-        return (uint32_t)combined;
+        return upper_32 ^ lower_32;
     }
 }
 
@@ -167,6 +172,8 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
         // TODO: Rethink the lifecycle of DataStreamRecvr to distinguish
         // errors from receiver-initiated teardowns.
         VLOG_QUERY << request.sender_id() << " sender transmits chunks to a non-existing receiver fragment "
+                   << print_id(request.finst_id());
+        LOG(ERROR) << "[ESS EXCHANGE SOURCE] " << request.sender_id() << " sender transmits chunks to a non-existing receiver fragment "
                    << print_id(request.finst_id());
         return Status::OK();
     }

@@ -28,6 +28,19 @@
 #include "util/time.h"
 #include "util/uid_util.h"
 
+namespace {
+    constexpr uint32_t simple_int128_checksum(const __int128_t n) {
+        const uint64_t high_bits = (uint64_t)(n >> 64);
+        const uint64_t low_bits  = (uint64_t)n;
+
+        // 2. Combine the two halves using XOR.
+        const uint64_t combined = high_bits ^ low_bits;
+
+        // 3. Extract the desired 32 bits (4 bytes).
+        return (uint32_t)combined;
+    }
+}
+
 namespace starrocks::pipeline {
 
 SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
@@ -459,8 +472,8 @@ Status SinkBuffer::_send_ess(const TransmitChunkInfo &request) const {
     ss << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     const std::string ess_endpoint_str = ss.str();
     LOG(INFO) << "[ESS EXCHANGE SINK] Connecting to " << ess_endpoint_str
-            << " with JOB ID=" << job_id << " MAX_PARTITION=" << total_nodes;
-    _ess_ptr->connect(std::move(_ess_endpoint), job_id, total_nodes);
+            << " with QUERY=" << job_id << " MAX_PARTITION=" << total_nodes;
+    _ess_ptr->connect(_ess_endpoint, job_id, total_nodes);
     // Create the target_id when sending chunks. dest ip is in request.brpc_addr.hostname!
     sockaddr_in dest_sockaddr;
     // We use port 0 since it's unused.
@@ -472,12 +485,12 @@ Status SinkBuffer::_send_ess(const TransmitChunkInfo &request) const {
     std::vector<char> request_buffer(request_size);
     char* char_buffer = request_buffer.data();
     RETURN_ERROR_IF_FALSE(request.params->SerializeToArray(char_buffer, request_size));
-    LOG(INFO) << "[ESS EXCHANGE SINK] Sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << request_size << "B to "
-            << ess_endpoint_str;
+    LOG(INFO) << "[ESS EXCHANGE SINK] QUERY=" << job_id << " PARTITION_CHECKSUM=" << simple_int128_checksum(encoded_sockaddr)
+              << "; Sending data of size " << request_size << "B to " << ess_endpoint_str;
     _ess_ptr->send(encoded_sockaddr, char_buffer, request_size);
-    LOG(INFO) << "[ESS EXCHANGE SINK] Finished sending PARTITION ID=" << request.brpc_addr.hostname << " of size " << request_size << "B to "
-            << ess_endpoint_str;
-    LOG(INFO) << "[ESS EXCHANGE SINK] Disconnecting from " << ess_endpoint_str;
+    LOG(INFO) << "[ESS EXCHANGE SINK] QUERY=" << job_id << " PARTITION_CHECKSUM=" << simple_int128_checksum(encoded_sockaddr)
+              << "; Finished sending data of size " << request_size << "B to " << ess_endpoint_str;
+    LOG(INFO) << "[ESS EXCHANGE SINK] QUERY=" << job_id << "; Disconnecting from " << ess_endpoint_str;
     _ess_ptr->close();
     return Status::OK();
 }

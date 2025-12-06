@@ -46,6 +46,18 @@
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 #include "util/starrocks_metrics.h"
+namespace {
+    constexpr uint32_t simple_int128_checksum(const __int128_t n) {
+        const uint64_t high_bits = (uint64_t)(n >> 64);
+        const uint64_t low_bits  = (uint64_t)n;
+
+        // 2. Combine the two halves using XOR.
+        const uint64_t combined = high_bits ^ low_bits;
+
+        // 3. Extract the desired 32 bits (4 bytes).
+        return (uint32_t)combined;
+    }
+}
 
 namespace starrocks {
 
@@ -260,23 +272,23 @@ PassThroughChunkBuffer* DataStreamMgr::get_pass_through_chunk_buffer(const TUniq
     return _pass_through_chunk_buffer_manager.get(query_id);
 }
 
-Status DataStreamMgr::receive_from_ess(const fdl::job_id_t query_id) {
+Status DataStreamMgr::receive_from_ess(const fdl::job_id_t job_id) {
     // NOTE(zhujose1): max_partition_id is hardcoded for now
     constexpr size_t total_nodes = 8;
     std::stringstream ss;
     ss << _ess_endpoint.target.addr.first << ":" << _ess_endpoint.target.addr.second;
     const std::string ess_endpoint_str = ss.str();
     LOG(INFO) << "[ESS EXCHANGE SOURCE] Connecting to " << ess_endpoint_str
-          << " with JOB ID=" << query_id << " MAX_PARTITION=" << total_nodes;
-    _ess_ptr->connect(std::move(_ess_endpoint), query_id, total_nodes);
+          << " with QUERY=" << job_id << " MAX_PARTITION=" << total_nodes;
+    _ess_ptr->connect(std::move(_ess_endpoint), job_id, total_nodes);
     sockaddr_in our_sockaddr;
     // We use port 0 to follow SinkBuffer.
     RETURN_ERROR_IF_FALSE(fdl::stringToSockaddr(BackendOptions::get_localhost(), 0, our_sockaddr));
     fdl::user::target_id_t encoded_sockaddr = fdl::encode_sockaddr(our_sockaddr);
     vector partitions { encoded_sockaddr };
     fdl::response_map_t result;
-    LOG(INFO) << "[ESS EXCHANGE SOURCE] Receiving for query_id=" << query_id << ", PARTITION ID= "
-              << BackendOptions::get_localhost();
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] QUERY=" << job_id << " PARTITION_CHECKSUM="
+              << simple_int128_checksum(encoded_sockaddr) << "; Receiving";
     _ess_ptr->receive(std::move(partitions), &result);
     // construct result
     if (result.empty()) {
@@ -286,13 +298,13 @@ Status DataStreamMgr::receive_from_ess(const fdl::job_id_t query_id) {
     // At the moment we only expect a single buffer to be received
     CHECK(result.contains(encoded_sockaddr));
     const std::vector<char>& result_pb_data = result[encoded_sockaddr].first;
-    LOG(INFO) << "[ESS EXCHANGE SOURCE] Received buffer size: " << result_pb_data.size() << "B for query_id=" << query_id << ", PARTITION ID= "
-              << BackendOptions::get_localhost();
+    LOG(INFO) << "[ESS EXCHANGE SOURCE] QUERY=" << job_id << " PARTITION_CHECKSUM="
+          << simple_int128_checksum(encoded_sockaddr) << "; Received buffer of size " << result_pb_data.size() << "B";
 
     PTransmitChunkParams result_pb;
     if (!result_pb.ParseFromArray(result_pb_data.data(), result_pb_data.size())) {
-        LOG(ERROR) << "[ESS EXCHANGE SOURCE] Failed to parse PTransmitChunkParams for query_id=" << query_id << ", PARTITION ID= "
-                   << BackendOptions::get_localhost();
+        LOG(ERROR) << "[ESS EXCHANGE SOURCE] QUERY=" << job_id << " PARTITION_CHECKSUM="
+                   << simple_int128_checksum(encoded_sockaddr) << "; Failed to parse PTransmitChunkParams";
         return Status::InternalError("Failed to parse PTransmitChunkParams from ESS data");
     }
 
